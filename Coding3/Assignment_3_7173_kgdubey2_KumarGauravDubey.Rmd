@@ -1,0 +1,125 @@
+---
+title: "Coding_Assignment_3"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+### Kumar Gaurav Dubey (kgdubey2)
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Function preparation
+
+
+```{r cars}
+lo.lev = function(x1, sp){
+  n = length(x1);
+  lev = rep(0, n)
+
+  Q = diag(n)
+  
+  for (i in 1:n) {
+    y_ = Q[,i]
+    df_ = data.frame(x = x1, y = y_)
+    temp_model = loess(y ~ x, data = df_, span = sp,
+                        control=loess.control(surface = "direct"))
+    lev[i] = fitted.values(temp_model)[i]
+  }
+  
+  return(lev)
+}
+
+onestep_CV = function(x1, y1, sp){
+
+  n = length(x1)
+  Loess_model = loess(y1 ~ x1, span = sp,
+                       control=loess.control(surface = "direct"))
+  
+  res = residuals(Loess_model)
+  
+  # Call lo.lev to obtain the diagonal entries of S
+  
+  S = lo.lev(x1, sp)
+  
+  # Compute LOO-CV and GCV 
+  
+  cv = sum((res/(1-S))^2)/n
+  gcv = sum(res^2) / (n*(1-(sum(S)/n))^2)
+  
+
+  return(list(cv = cv, gcv = gcv))
+}
+
+myCV = function(x1, y1, span){
+
+  m = length(span)
+  
+  cv = rep(0, m)
+  gcv = rep(0, m)
+  
+  for(i in 1:m){
+  
+    tmp = onestep_CV(x1, y1, span[i])
+    cv[i] = tmp$cv
+    gcv[i] = tmp$gcv
+    
+  }
+  return(list(cv = cv, gcv = gcv))
+}
+
+```
+
+## Test your function
+
+
+```{r pressure, echo=FALSE}
+mydata = read.csv(file = "Coding3_Data.csv")
+```
+
+```{r}
+dim(mydata)
+```
+
+```{r}
+span1 = seq(from = 0.2, by = 0.05, length = 15 )
+cv.out = myCV(mydata$x, mydata$y, span1)
+
+```
+
+# Print out your results
+## Print your results on LOO-CV and GCV. Both achieve their minimal at 0.5.
+
+```{r}
+myout = data.frame(CV = cv.out$cv, 
+                   GCV = cv.out$gcv, 
+                   span = span1)
+myout
+```
+
+```{r}
+myout$span[myout$GCV == min(myout$GCV)]
+```
+
+
+```{r}
+myout$span[myout$CV == min(myout$CV)]
+```
+
+# Plot the fitted curve
+## Plot the data (red circles), the true curve (gray) and the fitted curve (blue dashed line) using the optimal span.
+
+```{r}
+spangcv.min = 0.5
+plot(mydata$x, mydata$y, xlab="", ylab="", col="gray");
+fx = 1:50/50;
+fy = sin(12*(fx+0.2))/(fx+0.2)
+lines(fx, fy, col=8, lwd=2);
+
+f = loess(y ~ x, mydata, span = spangcv.min)
+lines(fx, predict(f, data.frame(x = fx), surface = "direct"), 
+      lty=2, lwd=2, col="blue")
+```
+

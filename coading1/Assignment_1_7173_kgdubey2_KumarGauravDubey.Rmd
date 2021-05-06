@@ -1,0 +1,165 @@
+---
+title: "Coding_Assignment_1"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+# Kumar Gaurav Dubey (kgdubey2)
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Generate twenty two-dimensional vector
+
+```{r}
+set.seed(7173)
+
+csize = 10;       # number of centers
+p = 2;      
+s = 1;
+m1 = matrix(rnorm(csize*p), csize, p)*s + cbind( rep(1,csize), rep(0,csize));
+m0 = matrix(rnorm(csize*p), csize, p)*s + cbind( rep(0,csize), rep(1,csize));
+```
+
+# Creating Erorr List
+
+```{r}
+
+error_dataframe = data.frame(linear_train = rep(0, 20), linear_test = rep(0, 20),quad_train = rep(0, 20), quad_test = rep(0, 20),
+                             byes_train = rep(0, 20), byes_test = rep(0, 20),knn_train = rep(0, 20), knn_test = rep(0, 20))
+best_k_values = rep(0, 20)
+```
+
+# Start Simulation
+
+```{r}
+library(class)
+for (i in 1:20)
+{
+  # Creating train data
+n=100;  
+# Randomly allocate the n samples for class 1  to the 10 clusters
+id1 = sample(1:csize, n, replace = TRUE);
+id0 = sample(1:csize, n, replace = TRUE);  
+
+s= sqrt(1/5);     
+
+traindata = matrix(rnorm(2*n*p), 2*n, p)*s + rbind(m1[id1,], m0[id0,])
+Ytrain = c(rep(1,n), rep(0,n))
+
+
+data_train = cbind(traindata, Ytrain)
+data_train = data.frame(data_train)
+colnames(data_train) = c('x1', 'x2', 'y')
+
+# Generate test data
+N = 5000;  
+id1 = sample(1:csize, N, replace=TRUE);
+id0 = sample(1:csize, N, replace=TRUE); 
+testdata = matrix(rnorm(2*N*p), 2*N, p)*s + rbind(m1[id1,], m0[id0,])
+colnames(testdata) = c('x1', 'x2')
+Ytest = c(rep(1,N), rep(0,N))
+  
+# Linear regression with cut-off value2 
+model = lm (y ~ ., data= data_train)
+Y_output = ifelse(model$fitted.values > .5, 1, 0)
+error_dataframe[i, 1] =  mean(data_train$y != Y_output)
+
+ # Linear model to fit test  data
+testdataresult = predict(model, newdata = data.frame(testdata))
+Y_test = ifelse(testdataresult > .5, 1, 0)
+error_dataframe[i, 2] =  mean(Y_test != Ytest)
+
+#### quadratic regression
+model2 = lm(y ~ x1 + x2 + I(x1 * x2) + I(x1^2) + I(x2^2), data = data_train)
+Y_output2 = ifelse(model2$fitted.values > .5, 1, 0)
+#calculate error 
+error_dataframe[i, 3] = mean(data_train$y != Y_output2)
+testdataresult2 = predict(model2, newdata = data.frame(testdata))
+Y_test2 = ifelse(testdataresult2 > .5, 1, 0)
+#calculate error 
+error_dataframe[i, 4] = mean(Y_test2 != Ytest)
+
+
+#Bayes function 
+mixnorm=function(x){
+  ## return the density ratio for a point x, where each 
+  ## density is a mixture of normal with 10 components
+  sum(exp(-apply((t(m1)-x)^2, 2, sum)*5/2))/sum(exp(-apply((t(m0)-x)^2, 2, sum)*5/2))
+}
+
+Ytrain_pred_Bayes = apply(traindata, 1, mixnorm)
+Ytrain_pred_Bayes = as.numeric(Ytrain_pred_Bayes > 1)
+train.err.Bayes = mean(Ytrain !=  Ytrain_pred_Bayes)
+error_dataframe[i, 5]=train.err.Bayes
+
+# On test data
+Ytest_pred_Bayes = apply(testdata, 1, mixnorm)
+Ytest_pred_Bayes = as.numeric(Ytest_pred_Bayes > 1);
+test.err.Bayes = mean(Ytest !=  Ytest_pred_Bayes)
+error_dataframe[i, 6] = test.err.Bayes
+
+#KNN
+myk = c(151, 101, 69, 45, 31, 21, 11, 7, 5, 3, 1)
+m = length(myk);
+k_error = rep(0, m)
+foldNum = 10
+foldSize = floor(nrow(data_train)/foldNum)
+# Loop through all knn vector to get small error and best K value
+for (j in 1:m)
+{
+  error = 0
+  for (runId in 1:foldNum) {
+    testSetIndex = ((runId - 1) * foldSize + 1):(ifelse(runId == foldNum, nrow(data_train), runId * foldSize))
+    trainX = data_train[-testSetIndex, c("x1", "x2")]
+    trainY = data_train[-testSetIndex, ]$y
+    testX = data_train[testSetIndex, c("x1", "x2")]
+    testY = data_train[testSetIndex, ]$y
+    predictY = knn(trainX, testX, trainY, myk[j])
+    error = error + sum(predictY != testY)
+  }
+  error = error/nrow(data_train)
+  k_error[j] = error
+}
+best_k = myk[which.min(k_error)]
+best_k_values[i] = best_k
+#error prediction for knn
+train_predict_knn = knn(traindata, traindata, Ytrain, best_k)
+error_dataframe[i, 7] = mean(Ytrain !=  train_predict_knn)
+test_predict_knn = knn(traindata, testdata, Ytrain, best_k)
+error_dataframe[i, 8] = mean(Ytest !=  test_predict_knn)
+  
+}
+
+```
+
+# Print Best K Values 
+
+```{r}
+print(best_k_values)
+```
+# Printing mean of best K-Values
+
+```{r}
+mean_k_value = mean(best_k_values)
+mean_k_value
+```
+# Printing standard daviation of best K-Values
+
+```{r}
+sd_k_value = sd(best_k_values)
+sd_k_value
+```
+
+
+## Box Plot of Errors
+
+```{r}
+boxplot(error_dataframe,main="Error for TEST and Train after 20 simulations",
+        ylab="Error",
+        col="orange",
+        border="brown", las=2 )
+
+```

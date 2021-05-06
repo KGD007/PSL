@@ -1,0 +1,133 @@
+---
+title: "Coding Assignment 2"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+# Kumar Gaurav Dubey (kgdubey2)
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Data Preparation
+
+```{r }
+library(MASS)
+library(glmnet)
+myData = Boston
+names(myData)[14] = "Y"
+iLog = c(1, 3, 5, 6, 8, 9, 10, 14);
+myData[, iLog] = log(myData[, iLog]);
+myData[, 2] = myData[, 2] / 10;
+myData[, 7] = myData[, 7]^2.5 / 10^4
+myData[, 11] = exp(0.4 * myData[, 11]) / 1000;
+myData[, 12] = myData[, 12] / 100;
+myData[, 13] = sqrt(myData[, 13]);
+X = as.matrix(myData[, -14])
+y = myData$Y
+
+```
+
+## One_var_lasso Function
+
+```{r }
+One_var_lasso = function(r, x, lam){
+  ###############
+  xx = sum(x^2)
+  xr = sum(r * x)
+  b = (abs(xr) - lam/2)/xx
+  b = sign(xr) * ifelse(b > 0, b, 0)
+  return(b)
+  ###############
+}
+```
+
+## My Lasso Function
+
+
+```{r}
+MyLasso = function(X, y, lam.seq, maxit = 50){
+
+  n = length(y)
+  p = dim(X)[2]
+  nlam = length(lam.seq)
+  ##############################
+  
+  # Record the corresponding means and scales
+  means <- colMeans(X)
+  sds <- apply(X, 2, function(x) sqrt((n-1)/n)*sd(x))
+  mean_y <- mean(y)
+  
+  # Center and scale X
+  X <- apply(X, MARGIN = 2, FUN = function(x) (x - mean(x))/(sqrt((n-1)/n)*sd(x)))
+  
+  # Center y
+  y <- y - mean_y
+  
+  ##############################
+  # Initialize coef vector b and residual vector r
+  b = rep(0, p)
+  r = y
+  B = matrix(nrow = nlam, ncol = p + 1)
+  
+  # Triple nested loop
+  for(m in 1:nlam){
+    lam = 2*n*lam.seq[m] # assign lambda value
+    for(step in 1: maxit){
+      for(j in 1:p){
+        r = r + (X[,j]*b[j])
+        b[j] = One_var_lasso(r, X[, j], lam)
+        r = r - X[, j] * b[j]
+      }
+    }
+    B[m, -1] = b
+  }
+  ##############################
+  # Scale back the coefficients and update the intercepts B[, 1]
+  unstand_matrix <- matrix(rep(sds, nlam), nrow = nlam, byrow = T)
+  B[, -1] <- B[, -1]/unstand_matrix
+  
+  B[, 1] <- apply(B[, -1], 1, function(beta) mean_y - sum(means*beta))
+  
+  ##############################
+  return(t(B))
+}
+```
+
+## Calling MyLasso Function
+```{r}
+lam.seq = exp(seq ( -1 , -8 , length.out = 80) )
+myout = MyLasso (X , y , lam.seq , maxit = 100)
+
+```
+
+## Calling Lasso Function using GLMNET package
+```{r}
+lasso.fit = glmnet (X , y , alpha = 1 , lambda = lam.seq)
+```
+
+## Comparing Coff Difference and displaying Max Diff
+
+```{r}
+max(abs( coef ( lasso.fit ) - myout ) )
+
+```
+
+```{r}
+x.index = log(lam.seq)
+beta = myout[-1, ]  # beta is a 13-by-80 matrix
+matplot(x.index, t(beta),
+        xlim = c(min(x.index), max(x.index)),
+        lty = 1,
+        xlab = "Log Lambda",
+        ylab = "Coefficients",
+        type="l", 
+        lwd = 1)
+```
+
+
+```{r}
+plot(lasso.fit, xvar = "lambda")
+```
